@@ -19,19 +19,28 @@ $("joinForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const name = $("name").value.trim();
   store("name", name);
-  connect(name);
+  connect(name, e.submitter && e.submitter.dataset.mode);
 });
 
-function connect(name) {
-  $("err").textContent = "";
+// Con servidor Python es un WebSocket; en GitHub Pages (p2p.js) es una conexión P2P
+// con la misma interfaz. mode solo importa en P2P: "host", "join" o "code".
+function openTransport(mode) {
+  if (window.P2P) return P2P.open(mode || P2P.defaultMode);
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  return new WebSocket(`${proto}://${location.host}/ws`);
+}
+
+function connect(name, mode) {
+  if (ws && ws.readyState === 0) return; // ya se está conectando
+  $("err").textContent = "";
+  ws = openTransport(mode);
   ws.onopen = () => ws.send(JSON.stringify({ t: "join", name }));
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
     $("join").style.display = "grid";
     $("net").style.display = "none";
-    if (myId) $("err").textContent = "Se cortó la conexión.";
+    if (ev && ev.reason) $("err").textContent = ev.reason;
+    else if (myId) $("err").textContent = "Se cortó la conexión.";
     myId = null;
     snaps = [];
     pred = null;
@@ -110,20 +119,22 @@ function reloadForUpdate() {
   let tries = 0;
   try { tries = Number(sessionStorage.getItem("updateTries")) || 0; } catch { /* sin storage */ }
   if (tries >= 2) {
-    $("err").textContent = "Hay una versión nueva del juego: recargá con Ctrl+F5.";
+    $("err").textContent = window.P2P ? "Tu versión del juego no es la del host: recarguen los dos con Ctrl+F5."
+      : "Hay una versión nueva del juego: recargá con Ctrl+F5.";
     return;
   }
   try {
     sessionStorage.setItem("updateTries", String(tries + 1));
-    sessionStorage.setItem("autojoin", "1");
+    sessionStorage.setItem("autojoin", "join");
   } catch { /* sin storage: el jugador vuelve a tocar Entrar */ }
   location.reload();
 }
 
 try {
-  if (sessionStorage.getItem("autojoin")) {
+  const mode = sessionStorage.getItem("autojoin");
+  if (mode) {
     sessionStorage.removeItem("autojoin");
-    connect($("name").value.trim());
+    connect($("name").value.trim(), mode);
   }
 } catch { /* sin storage */ }
 

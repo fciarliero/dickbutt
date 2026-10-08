@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config as C
 from .game import Game
+from .room import CLIENT_CONFIG
 
 CLIENT_DIR = Path(__file__).resolve().parent.parent / "client"
 
@@ -49,16 +50,6 @@ def _free_physics() -> None:
     game.space = None
     gc.collect()
 
-CLIENT_CONFIG = {
-    "headR": C.HEAD_R, "segR": C.SEG_R, "segLen": C.SEG_LEN, "ballR": C.BALL_R,
-    "snapshotHz": C.PHYSICS_HZ / C.BROADCAST_EVERY,
-    "boostCooldown": C.BOOST_COOLDOWN, "boostDuration": C.BOOST_DURATION,
-    "boostSpeedMult": C.BOOST_SPEED_MULT, "boostThrustMult": C.BOOST_THRUST_MULT,
-    "physicsHz": C.PHYSICS_HZ, "substeps": C.SUBSTEPS,
-    "turnSpeed": C.TURN_SPEED, "turnBlend": C.TURN_BLEND, "maxSpeed": C.MAX_SPEED,
-    "thrust": C.THRUST, "chainThrustBonus": C.CHAIN_THRUST_BONUS, "damping": C.SPACE_DAMPING,
-    "charMass": C.HEAD_MASS + C.SEG_COUNT * C.SEG_MASS + 2 * C.BALL_MASS,
-}
 
 # Lag simulado para probar la predicción en local: SIM_LAG_MS=150 python run.py
 # (es el ping total; se reparte mitad a la ida y mitad a la vuelta)

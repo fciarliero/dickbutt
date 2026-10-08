@@ -30,6 +30,7 @@ flowchart LR
 - **Servidor autoritativo**: toda la física, las reglas, los bots y las colisiones viven en Python. El cliente nunca decide nada del juego.
 - **Cliente liviano**: manda teclas, recibe el estado y lo dibuja. Para que no se note la latencia, interpola a los demás y predice la cadena que maneja él.
 - **Una sola sala**, hasta 8 jugadores contando bots.
+- **Dos formas de correrlo**: con el servidor Python (FastAPI + WebSocket) o en **GitHub Pages sin servidor**, donde el navegador de quien crea la sala corre el mismo Python con Pyodide y los demás se conectan por WebRTC (sección 15).
 
 ## 2. Archivos
 
@@ -39,6 +40,7 @@ flowchart LR
 | `start.sh` / `stop.sh` | Levantan el juego en segundo plano (log en `game.log`) y lo bajan buscando el proceso que escucha en el puerto. |
 | `server/config.py` | **Todos** los valores tuneables: anatomía, física, control, boost, hitbox, rondas, colores. |
 | `server/main.py` | App FastAPI: sirve el cliente, endpoint WebSocket `/ws`, loop del juego, broadcast, lag simulado, timer de Windows. |
+| `server/room.py` | `Room`: el protocolo de `/ws` y el loop de paso fijo sin red, para el host P2P. También `CLIENT_CONFIG`. |
 | `server/game.py` | `Game` y `Player`: fases de ronda, entrada de jugadores, controles, boost, penetración, ganador, snapshot. No sabe nada de red. |
 | `server/character.py` | `Character`: arma los cuerpos y joints de pymunk de un personaje, y el acople entre dos personajes. |
 | `server/chains.py` | Reglas puras de cadenas (merge, desconexión, ganador). No usa pymunk. |
@@ -46,6 +48,9 @@ flowchart LR
 | `server/bots.py` | IA de los bots: decide qué teclas aprieta cada bot. |
 | `client/index.html` | Pantalla de nombre, canvas y paneles del HUD (estilos inline). |
 | `client/game.js` | Conexión, input, interpolación, predicción, render y HUD. Vanilla JS, sin build. |
+| `client/p2p.js` | Solo en GitHub Pages: crear o unirse a una sala, PeerJS y un transporte con la interfaz de WebSocket. |
+| `client/host-worker.js` | Solo en GitHub Pages: Web Worker que carga Pyodide + pymunk y corre `Room`. |
+| `tools/build_pages.py` | Arma `_site/` para Pages. Lo corre `.github/workflows/pages.yml`. |
 | `tests/` | `test_chains.py` (reglas), `test_sim.py` (física headless), `test_bots.py` (IA y bots). |
 
 ## 3. El loop del servidor
@@ -314,10 +319,42 @@ ngrok http 8765       # para jugar con gente de afuera (el cliente usa wss:// so
 - **Reiniciar el servidor desconecta a todos**: tienen que recargar la página. Si se recarga el cliente nuevo contra un servidor viejo, la predicción puede romperse porque le faltan campos de `config`.
 - **Cierre del proceso**: `main.py` libera la física en un `atexit`, porque si pymunk se desmonta antes que el `Game` global, Python termina con segfault.
 
-## 15. Limitaciones conocidas
+## 15. Modo P2P (GitHub Pages)
+
+```mermaid
+flowchart LR
+    subgraph Host["Navegador del host"]
+        HC[game.js] <-->|transporte local| P[p2p.js]
+        P <-->|postMessage| W[host-worker.js<br/>Pyodide + pymunk<br/>server/room.py]
+    end
+    subgraph Inv["Navegador de un invitado"]
+        IC[game.js] <--> IP[p2p.js]
+    end
+    IP <-->|WebRTC DataChannel| P
+    IP -.->|señalización| BR[(broker público<br/>de PeerJS)]
+    P -.-> BR
+```
+
+- **El mismo código Python.** `host-worker.js` baja Pyodide 314 (CDN de jsDelivr) y `pymunk==7.3.0` (PyPI publica un wheel para Pyodide), escribe los `.py` de `server/` (menos `main.py`) en el sistema de archivos virtual y crea un `Room`. La física da lo mismo que en CPython. Con 7 jugadores el worker sostiene 60 ticks/s.
+- **`Room`** hace lo que hace `main.py` sin FastAPI: recibe `(conexión, texto)` y contesta con callbacks `send(conn, texto)` y `kick(conn)`. `tick(ahora)` corre los pasos de 1/60 s que se deben y devuelve el snapshot cada 2. El worker lo llama con `setTimeout` hasta `room.next_t`.
+- **En un worker** para que la física no trabe el render del host y porque los timers de un worker no se frenan con la pestaña en segundo plano. Es un worker de tipo módulo: Chrome no deja usar `importScripts` con scripts de otro dominio.
+- **Transporte.** `P2P.open(modo)` devuelve un objeto con la interfaz de WebSocket (`readyState`, `send`, `close`, `onopen`, `onmessage`, `onclose`), así que `game.js` no cambia: el protocolo de la sección 10 viaja igual. El host juega por un transporte local que habla directo con el worker (ping ~0 ms).
+- **Salas.** El host registra el id `culocaca-v1-<CÓDIGO>` en el broker público de PeerJS (`0.peerjs.com`); el código son 5 letras sin caracteres ambiguos. Los invitados entran con `?sala=CÓDIGO` o escribiéndolo. El broker solo arma la conexión: los datos van directo entre navegadores (o por los TURN de PeerJS si las redes no se ven). El canal es confiable y ordenado, como un WebSocket.
+- **Si el broker no anda**, el host juega igual, solo contra bots.
+- **Desconexiones.** Cada lado llama a `peer.destroy()` en `pagehide` para avisar enseguida. Si una conexión muere sin avisar, ICE queda en `disconnected` y se cierra a los 5 s (si no, WebRTC tarda ~30 s).
+- **Versión.** `build_pages.py` mete en `index.html` la huella de todos los archivos. Si la del invitado no coincide con la del host, el invitado recarga una vez (como en el modo servidor) y si sigue distinta pide recargar a los dos.
+
+```bash
+python tools/build_pages.py              # arma _site/
+python -m http.server 8080 -d _site      # http://localhost:8080 (abrí dos pestañas)
+```
+
+Para publicarlo: subir el repo a GitHub y en *Settings → Pages* elegir *Source: GitHub Actions*. Cada push a `main`/`master` corre los tests, arma `_site/` y lo publica.
+
+## 16. Limitaciones conocidas
 
 - **Una sola sala** global y sin persistencia: reiniciar el servidor borra todo.
 - **Sin autenticación**: cualquiera con la URL puede entrar y agregar o sacar bots.
-- **GitHub Pages solo no alcanza**, porque el servidor necesita Python corriendo. Habría que hostear el servidor aparte (Render, Fly.io, un VPS) y hacer que el cliente acepte la dirección del servidor.
+- **Modo P2P**: si el host cierra la pestaña se termina la partida para todos. La primera vez el host baja ~7 MB (Pyodide + pymunk) y tarda unos segundos en arrancar; después queda en caché. Depende del broker y de los TURN públicos de PeerJS: si se caen, no se puede entrar a las salas. La latencia de cada invitado es la de su conexión con el host.
 - **Esconder la cola contra una pared** es una defensa fuerte, especialmente contra bots.
 - **Con 8 jugadores** cada snapshot pesa ~3–4 KB. A 30 Hz son ~100 KB/s por jugador que tiene que subir el host. Subir a 60 Hz necesitaría un formato más compacto.

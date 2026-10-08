@@ -12,6 +12,17 @@ python run.py            # o en primer plano  (otro puerto: PORT=9000 ./start.sh
 ngrok http 8765          # compartí la URL https con tus amigos
 ```
 
+## Jugar sin servidor (GitHub Pages)
+
+La rama principal se publica sola en GitHub Pages (`.github/workflows/pages.yml`; una vez: *Settings → Pages → Source: GitHub Actions*). Ahí no hay servidor: quien toca **Crear sala** corre la física en su navegador y comparte el link (`?sala=CÓDIGO`); los demás se conectan directo a él por WebRTC. Si el host cierra la pestaña, se termina la partida.
+
+```
+python tools/build_pages.py              # arma _site/
+python -m http.server 8080 -d _site      # probalo en http://localhost:8080
+```
+
+Detalle en [ARCHITECTURE.md](ARCHITECTURE.md#15-modo-p2p-github-pages).
+
 ## Controles
 
 - `←` `→` / `A` `D`: girar
@@ -38,7 +49,8 @@ Detalle completo en [ARCHITECTURE.md](ARCHITECTURE.md).
 - `server/character.py`: construcción del personaje (glande, tronco de 6 segmentos, bolas).
 - `server/chains.py`: reglas de cadenas, sin física.
 - `server/main.py`: FastAPI, WebSocket `/ws` y el loop a 60 Hz (snapshots a 30 Hz).
-- `client/`: HTML + canvas, sin build.
+- `server/room.py`: el mismo protocolo sin red, para correrlo en el navegador.
+- `client/`: HTML + canvas, sin build. `p2p.js` y `host-worker.js` solo se usan en GitHub Pages.
 
 ## Tests
 

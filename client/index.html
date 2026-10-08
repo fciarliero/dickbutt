@@ -45,12 +45,29 @@
   #name { background: #1c1424; color: var(--fg); margin-bottom: 10px; }
   #go { background: var(--accent); color: #1a0d14; font-weight: 700; border: 0; cursor: pointer; }
   #join .err { color: #ff8a8a; min-height: 1.3em; margin: 10px 0 0; }
+  #join .status { color: var(--muted); min-height: 1.3em; margin: 6px 0 0; font-size: 13px; }
+  /* modo P2P (GitHub Pages, lo activa p2p.js) */
+  .p2p-only { display: none; }
+  body.p2p .p2p-only { display: block; }
+  body.p2p .ws-only { display: none; }
+  .p2p-only button { width: 100%; font: inherit; padding: 10px 12px; border-radius: 8px; border: 0; background: var(--accent); color: #1a0d14; font-weight: 700; cursor: pointer; margin-bottom: 8px; }
+  .p2p-only button.secondary { background: #2a1f33; color: var(--fg); border: 1px solid #4a3a55; font-weight: 400; }
+  .p2p-only button[hidden], .p2p-only div[hidden] { display: none; }
+  #p2pCodeRow { display: flex; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.1); }
+  #p2pCodeRow[hidden] { display: none; }
+  #code { flex: 1; min-width: 0; font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #4a3a55; background: #1c1424; color: var(--fg); text-transform: uppercase; letter-spacing: .1em; }
+  #p2pCodeRow button { width: auto; margin: 0; }
+  #room { top: 52px; left: 16px; padding: 6px 10px; font-size: 12px; color: var(--muted); display: none; pointer-events: auto; max-width: 300px; }
+  #room b { color: var(--fg); letter-spacing: .1em; }
+  #room button { font: inherit; margin-left: 6px; padding: 2px 8px; border-radius: 6px; border: 1px solid #4a3a55; background: #2a1f33; color: var(--fg); cursor: pointer; word-break: break-all; }
+  #roomNote { display: block; margin-top: 2px; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="banner" class="panel"></div>
 <div id="net" class="panel">ping <b id="ping">–</b></div>
+<div id="room" class="panel">sala <b id="roomCode">—</b><button id="roomCopy">Copiar link</button><span id="roomNote"></span></div>
 <div id="players" class="panel"><h3>Cadenas</h3><div id="chains"></div>
   <div class="bots"><span>🤖 Bots: <b id="botCount">0</b></span>
     <button id="botMinus" title="Sacar un bot">−</button><button id="botPlus" title="Agregar un bot">+</button></div>
@@ -63,7 +80,13 @@
     <h1>🍆 Culo Caca</h1>
     <p>Metete entre las bolas de los demás y quedate con todo.</p>
     <input id="name" maxlength="16" placeholder="Tu nombre" autocomplete="off" autofocus>
-    <button id="go">Entrar</button>
+    <button id="go" class="ws-only">Entrar</button>
+    <div class="p2p-only">
+      <button id="p2pJoinLink" data-mode="join" hidden>Entrar a la sala <span id="roomLabel"></span></button>
+      <button id="p2pHost" data-mode="host">Crear sala</button>
+      <div id="p2pCodeRow"><input id="code" maxlength="8" placeholder="Código de sala" autocomplete="off"><button id="p2pJoinCode" data-mode="code" class="secondary">Unirse</button></div>
+    </div>
+    <p class="status" id="status"></p>
     <p class="err" id="err"></p>
   </form>
 </div>
