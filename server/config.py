@@ -26,7 +26,7 @@ HEAD_R = 13
 SEG_COUNT = 6
 SEG_LEN = 20
 SEG_R = 9
-BALL_R = 12
+BALL_R = 16
 BALL_GAP = 6  # separación entre las bolas (hueco de entrada)
 
 HEAD_MASS = 1.0
@@ -34,9 +34,9 @@ SEG_MASS = 0.6
 BALL_MASS = 0.35
 
 # Tronco: resorte angular entre segmentos + límite de doblez
-SHAFT_STIFFNESS = 800  # más bajo = más flexible
-SHAFT_DAMPING = 70
-SHAFT_MAX_BEND = math.radians(65)  # doblez máximo por articulación
+SHAFT_STIFFNESS = 1200  # más bajo = más flexible
+SHAFT_DAMPING = 85
+SHAFT_MAX_BEND = math.radians(55)  # doblez máximo por articulación
 
 # Testículos: resorte hacia la posición de reposo
 BALL_STIFFNESS = 50
