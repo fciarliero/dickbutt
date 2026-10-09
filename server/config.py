@@ -75,6 +75,12 @@ ROUND_OVER_S = 5.0
 MAX_PLAYERS = 8
 NAME_MAX = 16
 
+# --- Chat ---
+CHAT_MAX = 140  # caracteres por mensaje
+CHAT_RATE_N = 3  # como mucho CHAT_RATE_N mensajes...
+CHAT_RATE_S = 5.0  # ...cada CHAT_RATE_S segundos por jugador
+CHAT_HISTORY = 30  # mensajes que recibe quien entra tarde
+
 COLORS = [
     "#ff6b9a", "#ffb347", "#6bd6ff", "#9b7bff",
     "#7cf08a", "#ff7a59", "#f5e663", "#e07bff",

@@ -192,6 +192,7 @@ Los bots son `Player` con `bot=True`. No tienen socket: en cada tick `bots.think
 - **Esquiva**: mira 60 y 120 px adelante; si hay pared u obstáculo (y el objetivo no está más cerca), gira hacia el lado libre. En la estocada final no esquiva.
 - **Paciencia**: si en 5 s no se acercó 40 px a su presa, hace una finta al azar (0,5–1,3 s), ignora esa presa durante 5 s y busca otra. Sin esto, dos bots se perseguían la cola en círculo para siempre.
 - **Conquistado**: tironea hacia un lado al azar, cambia cada 0,25–0,8 s y de vez en cuando usa el boost.
+- **Chat**: cuando a un bot lo conquistan, conquista o gana, `bots.react()` tira la moneda (50 %) y programa una frase de `LINES` («No, la cola no ahh.», «atrodeeen»…) para 0,4–1,5 s después, como si la escribiera. Un mismo bot no habla más de una vez cada 4 s y entre frases de cualquier bot pasan al menos 1,5 s. Las frases salen por `Game.chat`, igual que las de un humano.
 
 Medido en simulación: 4 bots solos terminan 8 de 8 rondas en 15–95 s.
 
@@ -205,7 +206,8 @@ Medido en simulación: 4 bots solos terminan 8 de 8 rondas en 15–95 s.
 | C → S | `{"t":"input","l","r","u","b"}` (0/1) | Solo cuando cambia una tecla. |
 | C → S | `{"t":"ping","c":<performance.now>}` | Cada 1 s. |
 | C → S | `{"t":"add_bot"}` / `{"t":"remove_bot"}` | Botones `+` / `−`. |
-| S → C | `{"t":"welcome","id","arena","config"}` | Una vez. `config` trae tamaños y las constantes que necesita la predicción. |
+| C → S | `{"t":"chat","text"}` | Mensaje de chat (Enter en la PC, 💬 en el celu). |
+| S → C | `{"t":"welcome","id","arena","config","chat"}` | Una vez. `config` trae tamaños y las constantes que necesita la predicción; `chat`, los últimos 30 mensajes. |
 | S → C | `{"t":"state", ...}` | 30 Hz (ver abajo). |
 | S → C | `{"t":"pong","c"}` | Respuesta al ping, devuelve el mismo `c`. |
 | S → C | `{"t":"error","msg"}` | Sala llena, etc. |
@@ -225,11 +227,20 @@ Medido en simulación: 4 bots solos terminan 8 de 8 rondas en 15–95 s.
       "t": [x, y]              // zona objetivo, solo si es el último de su cadena
     }
   },
-  "events": [{ "kind": "conquest" | "win" | "join" | "leave", ... }] // opcional
+  "events": [{ "kind": "conquest" | "win" | "join" | "leave" | "chat", ... }] // opcional
 }
 ```
 
 Pesa ~1,7 KB con 4 jugadores. Se serializa una sola vez por broadcast y se manda a todos con `asyncio.gather`; los errores de envío se ignoran porque cada handler detecta su propia desconexión.
+
+### Chat
+
+El chat no tiene un mensaje propio de servidor a cliente: `Game.chat(pid, texto)` lo agrega como evento `{"kind":"chat","id","who","name","color","bot","text"}` y sale en el próximo snapshot (≤ 33 ms), en los dos modos. Lleva nombre y color para poder mostrarlo aunque el jugador ya se haya ido; `id` evita duplicados entre el historial del `welcome` y el snapshot siguiente.
+
+- Se limpia (sin caracteres de control, `strip`) y se corta a 140 caracteres; vacío se descarta.
+- Como mucho 3 mensajes cada 5 s por jugador (`CHAT_RATE_N`, `CHAT_RATE_S`); el resto se ignora en silencio.
+- `Game.chat_log` guarda los últimos 30 para el que entra tarde.
+- En el cliente, los mensajes aparecen en el feed (12 s) y en la caja de chat. Mientras escribís, las teclas del juego no se capturan y se sueltan las que estaban apretadas.
 
 ### Lag simulado
 

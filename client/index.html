@@ -22,7 +22,18 @@
   #safe { position: fixed; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   .panel { position: fixed; background: var(--panel); border-radius: 10px; padding: 10px 12px; pointer-events: none; }
   #net { top: var(--gt); left: var(--gl); padding: 6px 10px; font-size: 12px; color: var(--muted); display: none; pointer-events: auto; }
-  #fsBtn { font: inherit; margin-left: 6px; padding: 0 6px; border-radius: 6px; border: 1px solid #4a3a55; background: #2a1f33; color: var(--fg); }
+  #fsBtn, #chatBtn { font: inherit; margin-left: 6px; padding: 0 6px; border-radius: 6px; border: 1px solid #4a3a55; background: #2a1f33; color: var(--fg); cursor: pointer; position: relative; }
+  #chatDot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: none; }
+  #chatBtn.unread #chatDot { display: block; }
+  /* chat: abierto oculta el feed (los mensajes ya están en la caja) */
+  #chatBox { left: var(--gl); bottom: var(--gb); width: min(420px, calc(100vw - 2 * var(--gl))); padding: 8px; display: none; pointer-events: auto; }
+  body.chatting #chatBox { display: block; }
+  body.chatting #feed, body.chatting #help { display: none; }
+  #chatLog { max-height: 40vh; overflow-y: auto; font-size: 13px; margin-bottom: 6px; -webkit-user-select: text; user-select: text; }
+  #chatLog div { padding: 2px 2px; overflow-wrap: anywhere; }
+  #chatLog:empty::before { content: "Todavía nadie dijo nada."; color: var(--muted); }
+  #chatInput { width: 100%; font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 8px; border: 1px solid #4a3a55; background: #1c1424; color: var(--fg); }
+  #feed div.chat { border-left: 3px solid var(--c, var(--muted)); overflow-wrap: anywhere; }
   #net b { font-variant-numeric: tabular-nums; }
   #banner { top: var(--gt); left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 700; text-align: center; display: none; }
   #banner small { display: block; font-size: 14px; font-weight: 400; color: var(--muted); }
@@ -106,6 +117,10 @@
     #players { min-width: 0; max-width: 45vw; font-size: 13px; padding: 6px 10px; }
     #feed { top: calc(var(--gt) + 84px); bottom: auto; max-width: 55vw; font-size: 12px; }
     #feed div { padding: 3px 8px; margin-top: 4px; }
+    /* arriba: abajo lo tapa el teclado del celu */
+    #chatBox { top: calc(var(--gt) + 84px); bottom: auto; }
+    #chatLog { max-height: 25vh; }
+    body.chatting #banner { display: none; }
   }
   @media (max-height: 500px) {
     #join form { padding: 16px 20px; }
@@ -125,7 +140,8 @@
 <div id="touchHint">arrastrá para moverte · <b>⚡</b> boost</div>
 <div id="rotateHint" class="panel">📱 girá el celu para ver más</div>
 <div id="banner" class="panel"></div>
-<div id="net" class="panel">ping <b id="ping">–</b><button id="fsBtn" title="Pantalla completa" hidden>⛶</button></div>
+<div id="net" class="panel">ping <b id="ping">–</b><button id="chatBtn" title="Chat (Enter)">💬<i id="chatDot"></i></button><button id="fsBtn" title="Pantalla completa" hidden>⛶</button></div>
+<div id="chatBox" class="panel"><div id="chatLog"></div><form id="chatForm"><input id="chatInput" maxlength="140" placeholder="Escribí y apretá Enter (Esc cierra)" autocomplete="off" enterkeyhint="send"></form></div>
 <div id="room" class="panel">sala <b id="roomCode">—</b><button id="roomCopy">Copiar link</button><span id="roomNote"></span></div>
 <div id="players" class="panel"><h3 id="playersToggle">Cadenas <span id="chainCount"></span><span class="caret">▾</span></h3><div id="chains"></div>
   <div class="bots"><span>🤖 Bots: <b id="botCount">0</b></span>

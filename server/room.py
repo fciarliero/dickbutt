@@ -59,7 +59,8 @@ class Room:
                 return
             self.conns[conn] = player.id
             self.send(conn, dumps({"t": "welcome", "id": player.id, "version": self.version,
-                                   "arena": self.game.arena, "config": CLIENT_CONFIG}))
+                                   "arena": self.game.arena, "config": CLIENT_CONFIG,
+                                   "chat": list(self.game.chat_log)}))
         elif kind == "input":
             self.game.set_input(pid, msg.get("l", 0), msg.get("r", 0), msg.get("u", 0), msg.get("b", 0))
         elif kind == "ping":
@@ -71,6 +72,8 @@ class Room:
                 self.send(conn, dumps({"t": "error", "msg": str(e)}))
         elif kind == "remove_bot":
             self.game.remove_bot()
+        elif kind == "chat":
+            self.game.chat(pid, msg.get("text", ""))
 
     def leave(self, conn: str) -> None:
         pid = self.conns.pop(conn, None)

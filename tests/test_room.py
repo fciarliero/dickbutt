@@ -86,3 +86,15 @@ def test_tick_no_recupera_atrasos_largos():
     room.tick(0.0)
     room.tick(10.0)  # p. ej. la pestaña estuvo suspendida
     assert room.game.tick_n == 2
+
+
+def test_chat_sale_en_el_siguiente_tick_y_llega_en_el_welcome():
+    room, sent, _ = make_room()
+    room.receive("a", json.dumps({"t": "join", "name": "Ana"}))
+    room.receive("a", json.dumps({"t": "chat", "text": "hola <b>"}))
+    state = json.loads(room.tick(0.0) or room.tick(1 / C.PHYSICS_HZ))
+    [msg] = [e for e in state["events"] if e["kind"] == "chat"]
+    assert msg["text"] == "hola <b>" and msg["name"] == "Ana"
+    room.receive("b", json.dumps({"t": "join", "name": "Beto"}))
+    welcome = sent[-1][1]
+    assert welcome["t"] == "welcome" and [m["text"] for m in welcome["chat"]] == ["hola <b>"]

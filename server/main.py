@@ -156,7 +156,7 @@ async def ws_endpoint(ws: WebSocket):
             return
         sockets[player.id] = ws
         await ws.send_json({"t": "welcome", "id": player.id, "version": CLIENT_VERSION,
-                            "arena": game.arena, "config": CLIENT_CONFIG})
+                            "arena": game.arena, "config": CLIENT_CONFIG, "chat": list(game.chat_log)})
         while True:
             msg = await ws.receive_json()
             kind = msg.get("t")
@@ -173,6 +173,8 @@ async def ws_endpoint(ws: WebSocket):
                     await ws.send_json({"t": "error", "msg": str(e)})
             elif kind == "remove_bot":
                 game.remove_bot()
+            elif kind == "chat":
+                later(functools.partial(game.chat, player.id, msg.get("text", "")))
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:

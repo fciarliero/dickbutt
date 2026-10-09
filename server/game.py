@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections import deque
 from dataclasses import dataclass, field
 
 import pymunk
@@ -29,6 +30,7 @@ class Player:
     brain: dict = field(default_factory=dict)  # estado interno de la IA (solo bots)
     boost_until: int = 0  # tick hasta el que dura el boost
     boost_ready: int = 0  # tick desde el que se puede volver a usar
+    chat_ticks: list = field(default_factory=list)  # ticks de sus últimos mensajes (límite de spam)
 
 
 class Game:
@@ -41,6 +43,10 @@ class Game:
         self.winner: str | None = None
         self.events: list[dict] = []
         self._ids = itertools.count(1)
+        self._chat_ids = itertools.count(1)
+        self.chat_log: deque[dict] = deque(maxlen=C.CHAT_HISTORY)
+        self.pending_chat: list[tuple[int, str, str]] = []  # frases de bots: (tick, id, texto)
+        self.bot_chat_ready = 0  # tick desde el que cualquier bot puede volver a hablar
         self._new_space()
 
     # ------------------------------------------------------------ jugadores
@@ -106,6 +112,33 @@ class Game:
     def boosting(self, p: Player) -> bool:
         return self.tick_n < p.boost_until
 
+    # ----------------------------------------------------------------- chat
+    def chat(self, pid: str, text) -> bool:
+        """Un mensaje de chat: sale como evento en el próximo snapshot y queda en el historial."""
+        p = self.players.get(pid)
+        if not p or not p.connected:
+            return False
+        text = "".join(ch for ch in str(text) if ch.isprintable()).strip()[: C.CHAT_MAX].strip()
+        if not text:
+            return False
+        window = round(C.CHAT_RATE_S * C.PHYSICS_HZ)
+        p.chat_ticks = [t for t in p.chat_ticks if self.tick_n - t < window]
+        if len(p.chat_ticks) >= C.CHAT_RATE_N:
+            return False
+        p.chat_ticks.append(self.tick_n)
+        msg = {"kind": "chat", "id": next(self._chat_ids), "who": p.id, "name": p.name,
+               "color": p.color, "bot": p.bot, "text": text}
+        self.chat_log.append(msg)
+        self.events.append(msg)
+        return True
+
+    def _flush_bot_chat(self) -> None:
+        due = [m for m in self.pending_chat if m[0] <= self.tick_n]
+        if due:
+            self.pending_chat = [m for m in self.pending_chat if m[0] > self.tick_n]
+            for _, pid, text in due:
+                self.chat(pid, text)  # si el bot ya se fue, no pasa nada
+
     def _participants(self) -> set[str]:
         return {p.id for p in self.players.values() if p.connected and p.char}
 
@@ -167,6 +200,8 @@ class Game:
     # --------------------------------------------------------------- física
     def step(self, dt: float) -> None:
         self.tick_n += 1
+        if self.pending_chat:
+            self._flush_bot_chat()
         self._update_phase(dt)
         controls = self.phase in (PLAYING, ROUND_OVER)
         if controls:
@@ -263,12 +298,15 @@ class Game:
             p.char.set_group(new.id)
         self.events.append({"kind": "conquest", "by": attacker.pilot,
                             "entered": target.last, "controls": target.front})
+        bots.react(self, "conquered", target.last)
+        bots.react(self, "conquer", attacker.pilot)
 
     def _check_winner(self) -> None:
         w = winner(list(self.chains.values()), self._participants())
         if w:
             self.phase, self.timer, self.winner = ROUND_OVER, C.ROUND_OVER_S, w.pilot
             self.events.append({"kind": "win", "who": w.pilot, "size": len(w.members)})
+            bots.react(self, "win", w.pilot)
 
     # ------------------------------------------------------------- snapshot
     def snapshot(self) -> dict:

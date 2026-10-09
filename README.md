@@ -37,6 +37,10 @@ En el celu (se activa solo en pantallas táctiles):
 - Se juega mejor con el celu horizontal. En Android, ⛶ (al lado del ping) pone pantalla completa.
 - Si creás la sala desde el celu, no cambies de app ni bloquees la pantalla: el navegador frena la página y la sala se cae para todos.
 
+## Chat
+
+En la PC apretá **Enter**, escribí y otra vez **Enter** para mandar (**Esc** cierra). En el celu, el botón **💬** al lado del ping; tiene un punto cuando hay mensajes sin leer. Los bots también hablan cuando los conquistan, conquistan o ganan.
+
 ## Bots
 
 Con los botones `−` / `+` del panel de cadenas cualquiera puede sacar o agregar bots (`server/bots.py`). Cuentan como jugadores: pueden conquistar, ser conquistados (y sabotear) y ganar. Un bot agregado a mitad de ronda entra en la siguiente. Sin humanos conectados, los bots esperan en el lobby.

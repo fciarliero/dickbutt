@@ -37,6 +37,9 @@ function connect(name, mode) {
   ws.onopen = () => ws.send(JSON.stringify({ t: "join", name }));
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
   ws.onclose = (ev) => {
+    closeChat();
+    chatHistory = [];
+    $("chatBtn").classList.remove("unread");
     releaseAll();
     document.body.classList.remove("ingame");
     keepAwake(false);
@@ -64,6 +67,8 @@ function onMessage(msg) {
     document.body.classList.add("ingame");
     keepAwake(true);
     showTouchHint();
+    chatHistory = (msg.chat || []).slice(-CHAT_KEEP);
+    renderChatLog();
     cam = { x: arena.w / 2, y: arena.h / 2, zoom: 0.5 };
   } else if (msg.t === "error") {
     if (myId) showEvent({ kind: "error", msg: msg.msg });
@@ -105,17 +110,81 @@ function releaseAll() {
   releaseBoostButton();
   setInput({ l: 0, r: 0, u: 0, b: 0 });
 }
-addEventListener("keydown", (e) => { if (KEYS[e.code] && myId) { e.preventDefault(); setKey(e.code, 1); } });
+addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLInputElement) return; // escribiendo (nombre, código o chat)
+  if (e.key === "Enter" && myId) { e.preventDefault(); openChat(); return; }
+  if (KEYS[e.code] && myId) { e.preventDefault(); setKey(e.code, 1); }
+});
 addEventListener("keyup", (e) => setKey(e.code, 0));
 addEventListener("blur", releaseAll);
 
 // --------------------------------------------------------------------- bots
-function sendCmd(t) {
-  if (ws && ws.readyState === 1 && myId) ws.send(JSON.stringify({ t }));
+function sendCmd(t, data = {}) {
+  if (ws && ws.readyState === 1 && myId) ws.send(JSON.stringify({ t, ...data }));
 }
 for (const [id, cmd] of [["botPlus", "add_bot"], ["botMinus", "remove_bot"]]) {
   $(id).addEventListener("click", (e) => { sendCmd(cmd); e.currentTarget.blur(); });
 }
+
+// --------------------------------------------------------------------- chat
+// Los mensajes llegan como eventos "chat" del snapshot (los de los bots también).
+// Enter abre la caja en la PC; en el celu, el botón 💬 al lado del ping.
+const CHAT_KEEP = 30;
+let chatHistory = [];
+let chatting = false;
+
+function chatLine(m) {
+  return `<b style="color:${esc(m.color)}">${esc(m.name)}</b> ${esc(m.text)}`;
+}
+function renderChatLog() {
+  const log = $("chatLog");
+  log.innerHTML = chatHistory.map((m) => `<div>${chatLine(m)}</div>`).join("");
+  log.scrollTop = log.scrollHeight;
+}
+// Devuelve false si el mensaje ya estaba (puede venir en el welcome y en el snapshot siguiente).
+function addChat(m) {
+  if (chatHistory.some((h) => h.id === m.id)) return false;
+  chatHistory.push(m);
+  if (chatHistory.length > CHAT_KEEP) chatHistory.shift();
+  if (chatting) renderChatLog();
+  else if (m.who !== myId) $("chatBtn").classList.add("unread");
+  return true;
+}
+function openChat() {
+  if (!myId || chatting) return;
+  chatting = true;
+  releaseAll(); // que no quede una tecla apretada mientras escribís
+  document.body.classList.add("chatting");
+  $("chatBtn").classList.remove("unread");
+  renderChatLog();
+  $("chatInput").focus();
+}
+function closeChat() {
+  if (!chatting) return;
+  chatting = false;
+  document.body.classList.remove("chatting");
+  $("chatInput").blur();
+}
+$("chatForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("chatInput").value.trim();
+  if (text) sendCmd("chat", { text });
+  $("chatInput").value = "";
+  closeChat();
+});
+$("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { e.preventDefault(); closeChat(); }
+});
+$("chatInput").addEventListener("blur", () => setTimeout(() => {
+  if (document.activeElement !== $("chatInput")) closeChat(); // tocó afuera (celu)
+}, 0));
+// pointerdown sin default: el input no pierde el foco antes del click (si no, se cierra y se reabre)
+$("chatBtn").addEventListener("pointerdown", (e) => e.preventDefault());
+$("chatBtn").addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  if (chatting) closeChat();
+  else openChat();
+});
 
 // ------------------------------------------------------------------- táctil
 // En el celu: joystick flotante en la mitad izquierda y botón de boost abajo a la derecha.
@@ -143,6 +212,7 @@ addEventListener("touchstart", () => { if (!touchMode) setTouchMode(true); }, { 
 const touchLayer = $("touch");
 touchLayer.addEventListener("pointerdown", (e) => {
   if (!myId) return;
+  if (chatting) closeChat();
   if (e.target.closest("#boostBtn")) {
     if (boostPointer !== null) return;
     boostPointer = e.pointerId;
@@ -581,14 +651,22 @@ function showEvent(ev) {
     text = `${n(ev.who)} se fue`;
   } else if (ev.kind === "error") {
     text = `⚠️ ${esc(ev.msg)}`;
+  } else if (ev.kind === "chat") {
+    if (!addChat(ev)) return;
+    text = chatLine(ev);
   } else return;
   const div = document.createElement("div");
   div.innerHTML = text;
+  const life = ev.kind === "chat" ? 12000 : 5000; // el chat se lee con más calma
+  if (ev.kind === "chat") {
+    div.className = "chat";
+    div.style.setProperty("--c", ev.color);
+  }
   const feed = $("feed");
   feed.appendChild(div);
   while (feed.children.length > (touchMode ? 3 : 5)) feed.firstChild.remove();
-  setTimeout(() => { div.style.opacity = 0; }, 5000);
-  setTimeout(() => div.remove(), 6000);
+  setTimeout(() => { div.style.opacity = 0; }, life);
+  setTimeout(() => div.remove(), life + 1000);
 }
 
 function esc(s) {

@@ -3,6 +3,7 @@
 - Si pilotean: eligen la cola libre más cercana, se ubican detrás de ella y
   entran alineados. Esquivan paredes y obstáculos mirando hacia adelante.
 - Si están conquistados: sabotean tironeando para los costados.
+- A veces hablan en el chat cuando los conquistan, conquistan o ganan (`react`).
 """
 from __future__ import annotations
 
@@ -30,6 +31,18 @@ REACTION_TICKS = 4  # cada cuántos ticks re-decide (los humanos tampoco son ins
 BOOST_RANGE = 220  # a esta distancia de la cola, alineado, usa el boost
 SABOTAGE_BOOST_CHANCE = 0.03  # por decisión, si está conquistado
 
+# Chat: frases por situación. La primera de "conquered" y "atrodeeen" las pidió el dueño del juego.
+LINES = {
+    "conquered": ["No, la cola no ahh.", "atrodeeen", "¡sacámela!", "ay ay ay", "eso no estaba en el contrato",
+                  "¿quién me tocó?", "pará pará pará"],
+    "conquer": ["atrodeeen", "adentro 😎", "permiso…", "toc toc", "¿se puede?", "llegó papá"],
+    "win": ["gg ez", "¡todos adentro!", "soy el rey de la cadena 👑", "trencito 🚂"],
+}
+BOT_CHAT_CHANCE = 0.5  # probabilidad de decir algo en cada situación
+BOT_CHAT_SILENCE_S = 4.0  # un mismo bot no vuelve a hablar antes de esto
+BOT_CHAT_GAP_S = 1.5  # entre frases de cualquier bot
+BOT_CHAT_DELAY_S = (0.4, 1.5)  # "está escribiendo…"
+
 
 def think(game: "Game") -> None:
     for p in game.players.values():
@@ -46,6 +59,20 @@ def think(game: "Game") -> None:
             p.input = _sabotage(game, p)
             if random.random() < SABOTAGE_BOOST_CHANCE:
                 game.try_boost(p)
+
+
+def react(game: "Game", kind: str, pid: str | None) -> None:
+    """Quizás el bot `pid` dice algo sobre lo que le pasó; sale un rato después por game.chat."""
+    p = game.players.get(pid) if pid else None
+    if not (p and p.bot and p.connected) or random.random() >= BOT_CHAT_CHANCE:
+        return
+    now, hz = game.tick_n, C.PHYSICS_HZ
+    if now < p.brain.get("chat_ready", 0) or now < game.bot_chat_ready:
+        return
+    at = now + round(random.uniform(*BOT_CHAT_DELAY_S) * hz)
+    p.brain["chat_ready"] = at + round(BOT_CHAT_SILENCE_S * hz)
+    game.bot_chat_ready = at + round(BOT_CHAT_GAP_S * hz)
+    game.pending_chat.append((at, p.id, random.choice(LINES[kind])))
 
 
 def _sabotage(game: "Game", p: "Player") -> dict:
