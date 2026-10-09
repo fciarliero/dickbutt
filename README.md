@@ -1,4 +1,4 @@
-# Culo Caca
+# Dicknbutt
 
 Juego multijugador en el navegador. Cada jugador maneja la cabeza de un pene con dos testículos atrás. Si te metés entre las bolas de otro (por detrás, alineado y con velocidad), pasás a manejar su cuerpo y el tuyo queda enganchado atrás. Gana quien maneja la cadena cuando están todos adentro.
 

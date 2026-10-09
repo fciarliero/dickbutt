@@ -5,7 +5,7 @@
 
 window.P2P = (() => {
   const PEERJS = "https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js";
-  const PREFIX = "culocaca-v1-"; // id en el broker público de PeerJS: PREFIX + código de sala
+  const PREFIX = "dicknbutt-v1-"; // id en el broker público de PeerJS: PREFIX + código de sala
   const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O ni 1/I
   const CONNECT_TIMEOUT = 15000;
   const VERSION = (document.querySelector('meta[name="client-version"]') || {}).content || "dev";
@@ -236,7 +236,7 @@ window.P2P = (() => {
     btn.blur();
     if (canShare()) {
       try {
-        await navigator.share({ title: "Culo Caca", text: "Entrá a mi sala de Culo Caca", url });
+        await navigator.share({ title: "Dicknbutt", text: "Entrá a mi sala de Dicknbutt", url });
         return;
       } catch (err) {
         if (err.name === "AbortError") return; // lo cerró sin compartir

@@ -1,4 +1,4 @@
-# Arquitectura de Culo Caca
+# Arquitectura de Dicknbutt
 
 Juego multijugador 2D top-down en el navegador. Cada jugador maneja la cabeza de un pene con un tronco flexible y dos testículos. Si metés la punta entre los testículos de otro (por detrás, alineado y con velocidad), pasás a manejar su cuerpo y el tuyo queda enganchado atrás. Gana quien maneja la cadena cuando todos los jugadores están adentro.
 
@@ -354,7 +354,7 @@ flowchart LR
 - **`Room`** hace lo que hace `main.py` sin FastAPI: recibe `(conexión, texto)` y contesta con callbacks `send(conn, texto)` y `kick(conn)`. `tick(ahora)` corre los pasos de 1/60 s que se deben y devuelve el snapshot cada 2. El worker lo llama con `setTimeout` hasta `room.next_t`.
 - **En un worker** para que la física no trabe el render del host y porque los timers de un worker no se frenan con la pestaña en segundo plano. Es un worker de tipo módulo: Chrome no deja usar `importScripts` con scripts de otro dominio.
 - **Transporte.** `P2P.open(modo)` devuelve un objeto con la interfaz de WebSocket (`readyState`, `send`, `close`, `onopen`, `onmessage`, `onclose`), así que `game.js` no cambia: el protocolo de la sección 10 viaja igual. El host juega por un transporte local que habla directo con el worker (ping ~0 ms).
-- **Salas.** El host registra el id `culocaca-v1-<CÓDIGO>` en el broker público de PeerJS (`0.peerjs.com`); el código son 5 letras sin caracteres ambiguos. Los invitados entran con `?sala=CÓDIGO` o escribiéndolo. El broker solo arma la conexión: los datos van directo entre navegadores (o por los TURN de PeerJS si las redes no se ven). El canal es confiable y ordenado, como un WebSocket.
+- **Salas.** El host registra el id `dicknbutt-v1-<CÓDIGO>` en el broker público de PeerJS (`0.peerjs.com`); el código son 5 letras sin caracteres ambiguos. Los invitados entran con `?sala=CÓDIGO` o escribiéndolo. El broker solo arma la conexión: los datos van directo entre navegadores (o por los TURN de PeerJS si las redes no se ven). El canal es confiable y ordenado, como un WebSocket.
 - **Si el broker no anda**, el host juega igual, solo contra bots.
 - **Desconexiones.** Cada lado llama a `peer.destroy()` en `pagehide` para avisar enseguida. Si una conexión muere sin avisar, ICE queda en `disconnected` y se cierra a los 5 s (si no, WebRTC tarda ~30 s).
 - **Versión.** `build_pages.py` mete en `index.html` la huella de todos los archivos. Si la del invitado no coincide con la del host, el invitado recarga una vez (como en el modo servidor) y si sigue distinta pide recargar a los dos.
