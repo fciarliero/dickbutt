@@ -218,19 +218,37 @@ window.P2P = (() => {
     panel.style.display = "block";
     el("roomCode").textContent = code || "—";
     el("roomCopy").hidden = !code;
+    el("roomCopy").textContent = copyLabel();
+    // en el celu el navegador congela la página si cambiás de app o se apaga la pantalla
+    const touch = document.body.classList.contains("touch");
     el("roomNote").textContent = !code ? "sin conexión: solo vos y los bots"
-      : isHost ? "sos el host: si cerrás la pestaña se termina" : "";
+      : !isHost ? ""
+      : touch ? "sos el host: no cambies de app ni bloquees el celu"
+      : "sos el host: si cerrás la pestaña se termina";
   }
+  // En el celu abre el menú de compartir del sistema (WhatsApp, etc.); en la PC copia el link
+  // (Chrome en Windows también tiene navigator.share, pero ahí copiar es más cómodo).
+  const canShare = () => Boolean(navigator.share) && document.body.classList.contains("touch");
+  const copyLabel = () => (canShare() ? "Compartir" : "Copiar link");
   el("roomCopy").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
+    const url = roomLink(el("roomCode").textContent);
     btn.blur();
+    if (canShare()) {
+      try {
+        await navigator.share({ title: "Culo Caca", text: "Entrá a mi sala de Culo Caca", url });
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") return; // lo cerró sin compartir
+      }
+    }
     try {
-      await navigator.clipboard.writeText(roomLink(el("roomCode").textContent));
+      await navigator.clipboard.writeText(url);
       btn.textContent = "¡Copiado!";
     } catch {
-      btn.textContent = roomLink(el("roomCode").textContent);
+      btn.textContent = url;
     }
-    setTimeout(() => { btn.textContent = "Copiar link"; }, 2500);
+    setTimeout(() => { btn.textContent = copyLabel(); }, 2500);
   });
 
   return {

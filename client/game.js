@@ -37,6 +37,9 @@ function connect(name, mode) {
   ws.onopen = () => ws.send(JSON.stringify({ t: "join", name }));
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
   ws.onclose = (ev) => {
+    releaseAll();
+    document.body.classList.remove("ingame");
+    keepAwake(false);
     $("join").style.display = "grid";
     $("net").style.display = "none";
     if (ev && ev.reason) $("err").textContent = ev.reason;
@@ -58,6 +61,9 @@ function onMessage(msg) {
     cfg = msg.config;
     $("join").style.display = "none";
     $("net").style.display = "block";
+    document.body.classList.add("ingame");
+    keepAwake(true);
+    showTouchHint();
     cam = { x: arena.w / 2, y: arena.h / 2, zoom: 0.5 };
   } else if (msg.t === "error") {
     if (myId) showEvent({ kind: "error", msg: msg.msg });
@@ -78,17 +84,30 @@ function onMessage(msg) {
 // -------------------------------------------------------------------- input
 const KEYS = { ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r", ArrowUp: "u", KeyW: "u", Space: "b" };
 
+// Teclado y controles táctiles escriben el mismo input; se manda solo si algo cambió.
+function setInput(changes) {
+  let changed = false;
+  for (const [k, v] of Object.entries(changes)) {
+    if (input[k] === v) continue;
+    input[k] = v;
+    changed = true;
+    if (k === "b" && v) predictBoost();
+  }
+  if (changed && ws && ws.readyState === 1 && myId) ws.send(JSON.stringify({ t: "input", ...input }));
+  return changed;
+}
 function setKey(code, down) {
   const k = KEYS[code];
-  if (!k || input[k] === down) return false;
-  input[k] = down;
-  if (k === "b" && down) predictBoost();
-  if (ws && ws.readyState === 1 && myId) ws.send(JSON.stringify({ t: "input", ...input }));
-  return true;
+  return Boolean(k) && setInput({ [k]: down });
+}
+function releaseAll() {
+  releaseStick();
+  releaseBoostButton();
+  setInput({ l: 0, r: 0, u: 0, b: 0 });
 }
 addEventListener("keydown", (e) => { if (KEYS[e.code] && myId) { e.preventDefault(); setKey(e.code, 1); } });
 addEventListener("keyup", (e) => setKey(e.code, 0));
-addEventListener("blur", () => Object.keys(KEYS).forEach((c) => setKey(c, 0)));
+addEventListener("blur", releaseAll);
 
 // --------------------------------------------------------------------- bots
 function sendCmd(t) {
@@ -97,6 +116,137 @@ function sendCmd(t) {
 for (const [id, cmd] of [["botPlus", "add_bot"], ["botMinus", "remove_bot"]]) {
   $(id).addEventListener("click", (e) => { sendCmd(cmd); e.currentTarget.blur(); });
 }
+
+// ------------------------------------------------------------------- táctil
+// En el celu: joystick flotante en la mitad izquierda y botón de boost abajo a la derecha.
+// El joystick no manda ángulos: steerFromStick() lo traduce a las mismas teclas que el
+// teclado (girar hacia donde apunta, empujar si está bien apretado), así que el servidor,
+// el protocolo y la predicción no cambian.
+const STICK_R = 60; // px de pantalla: deflexión máxima
+const STICK_TURN = 0.2; // desde esta deflexión (0..1) gira hacia el stick
+const STICK_THRUST = 0.55; // desde esta, además empuja
+const STICK_DEADBAND = 0.1; // rad: ya alineado, deja de girar
+const STICK_LEAD_S = 0.08; // suelta el giro antes, según la velocidad angular, para no pasarse
+
+let touchMode = false;
+const stick = { id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
+let boostPointer = null;
+
+function setTouchMode(on) {
+  touchMode = on;
+  document.body.classList.toggle("touch", on);
+  $("fsBtn").hidden = !(on && document.fullscreenEnabled);
+}
+if (matchMedia("(pointer: coarse)").matches) setTouchMode(true);
+addEventListener("touchstart", () => { if (!touchMode) setTouchMode(true); }, { passive: true });
+
+const touchLayer = $("touch");
+touchLayer.addEventListener("pointerdown", (e) => {
+  if (!myId) return;
+  if (e.target.closest("#boostBtn")) {
+    if (boostPointer !== null) return;
+    boostPointer = e.pointerId;
+    $("boostBtn").classList.add("down");
+    setInput({ b: 1 });
+  } else if (stick.id === null && e.clientX < innerWidth / 2) {
+    Object.assign(stick, { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 });
+    const el = $("stick");
+    el.style.left = `${e.clientX}px`;
+    el.style.top = `${e.clientY}px`;
+    $("knob").style.transform = "";
+    el.classList.add("on");
+    hideTouchHint();
+  } else return;
+  e.preventDefault();
+  try { touchLayer.setPointerCapture(e.pointerId); } catch { /* el dedo ya se fue */ }
+});
+touchLayer.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== stick.id) return;
+  let dx = e.clientX - stick.ox;
+  let dy = e.clientY - stick.oy;
+  const len = Math.hypot(dx, dy);
+  if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
+  stick.dx = dx;
+  stick.dy = dy;
+  $("knob").style.transform = `translate(${dx}px, ${dy}px)`;
+});
+for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+  touchLayer.addEventListener(type, (e) => {
+    if (e.pointerId === stick.id) { releaseStick(); setInput({ l: 0, r: 0, u: 0 }); }
+    if (e.pointerId === boostPointer) { releaseBoostButton(); setInput({ b: 0 }); }
+  });
+}
+for (const el of [canvas, touchLayer]) el.addEventListener("contextmenu", (e) => e.preventDefault());
+
+function releaseStick() {
+  stick.id = null;
+  stick.dx = stick.dy = 0;
+  $("stick").classList.remove("on");
+}
+function releaseBoostButton() {
+  boostPointer = null;
+  $("boostBtn").classList.remove("down");
+}
+
+// Se llama en cada frame con la cabeza que manejo ya predicha: gira hacia el stick.
+function steerFromStick(chars) {
+  if (stick.id === null || !latest) return;
+  const head = cameraTarget(latest, chars);
+  const d = Math.hypot(stick.dx, stick.dy) / STICK_R;
+  let l = 0, r = 0;
+  if (head && d >= STICK_TURN) {
+    const diff = angleDelta(head[2], Math.atan2(stick.dy, stick.dx));
+    const lead = pred ? Math.abs(pred.w) * STICK_LEAD_S : 0;
+    if (diff > STICK_DEADBAND + lead) r = 1;
+    else if (diff < -STICK_DEADBAND - lead) l = 1;
+  }
+  setInput({ l, r, u: d >= STICK_THRUST ? 1 : 0 });
+}
+
+let hintTimer = null;
+function showTouchHint() {
+  if (!touchMode) return;
+  const el = $("touchHint");
+  el.style.opacity = 1;
+  el.classList.add("show");
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(hideTouchHint, 6000);
+}
+function hideTouchHint() {
+  const el = $("touchHint");
+  el.style.opacity = 0;
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => el.classList.remove("show"), 1000);
+}
+
+// Pantalla completa (Android; el iPhone no la tiene): de paso intenta trabar la pantalla horizontal.
+$("fsBtn").addEventListener("click", async (e) => {
+  e.currentTarget.blur();
+  try {
+    if (document.fullscreenElement) return await document.exitFullscreen();
+    await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+    await screen.orientation.lock("landscape");
+  } catch { /* no se pudo: se juega igual */ }
+});
+
+// Que no se apague la pantalla mientras jugás (sin teclado no hay "actividad" si mirás).
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (!on) {
+      if (wakeLock) await wakeLock.release();
+      wakeLock = null;
+    } else if (!wakeLock && navigator.wakeLock && document.visibilityState === "visible") {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    }
+  } catch { /* sin HTTPS, sin permiso o sin API */ }
+}
+document.addEventListener("visibilitychange", () => { if (myId) keepAwake(true); });
+
+// Panel de cadenas colapsable; en pantallas chicas arranca cerrado.
+if (matchMedia("(max-width: 700px), (max-height: 500px)").matches) $("players").classList.add("collapsed");
+$("playersToggle").addEventListener("click", () => $("players").classList.toggle("collapsed"));
 
 // ------------------------------------------------------------ nombre guardado
 function store(key, value) {
@@ -408,6 +558,7 @@ function updateHud(state) {
   const specs = state.players.filter((p) => p.spectator && p.connected);
   if (specs.length) rows.push(`<div class="chain" style="color:var(--muted)">👀 ${specs.map((p) => esc(p.name)).join(", ")}</div>`);
   $("botCount").textContent = state.players.filter((p) => p.bot && p.connected).length;
+  $("chainCount").textContent = state.chains.length ? `(${state.chains.length})` : "";
   $("chains").innerHTML = rows.join("") || '<div class="chain" style="color:var(--muted)">—</div>';
 }
 
@@ -435,7 +586,7 @@ function showEvent(ev) {
   div.innerHTML = text;
   const feed = $("feed");
   feed.appendChild(div);
-  while (feed.children.length > 5) feed.firstChild.remove();
+  while (feed.children.length > (touchMode ? 3 : 5)) feed.firstChild.remove();
   setTimeout(() => { div.style.opacity = 0; }, 5000);
   setTimeout(() => div.remove(), 6000);
 }
@@ -445,10 +596,18 @@ function esc(s) {
 }
 
 // ------------------------------------------------------------------- render
+// Un canvas a DPR 3 (muchos celulares) cuesta más del doble que a 2 y casi no se nota.
+const pixelRatio = () => Math.min(devicePixelRatio || 1, 2);
+let safe = { r: 0, b: 0 }; // notch y barra de inicio, en px
+
 function resize() {
-  const dpr = devicePixelRatio || 1;
-  canvas.width = innerWidth * dpr;
-  canvas.height = innerHeight * dpr;
+  const dpr = pixelRatio();
+  canvas.width = Math.round(innerWidth * dpr);
+  canvas.height = Math.round(innerHeight * dpr);
+  canvas.style.width = `${innerWidth}px`;
+  canvas.style.height = `${innerHeight}px`;
+  const cs = getComputedStyle($("safe"));
+  safe = { r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0 };
 }
 addEventListener("resize", resize);
 resize();
@@ -570,9 +729,11 @@ function drawLabels(state, chars, players) {
 }
 
 function drawMinimap(state, chars, players) {
-  const W = 180, H = W * arena.h / arena.w, pad = 16;
-  const dpr = devicePixelRatio || 1;
-  const x0 = innerWidth - W - pad, y0 = innerHeight - H - pad;
+  // en el celu va chico y abajo al centro: los costados son del joystick y del boost
+  const W = touchMode ? 120 : 180, H = W * arena.h / arena.w, pad = 16;
+  const dpr = pixelRatio();
+  const x0 = touchMode ? (innerWidth - W) / 2 : innerWidth - W - Math.max(pad, safe.r);
+  const y0 = innerHeight - H - Math.max(pad, safe.b);
   const s = W / arena.w;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = "rgba(20,14,28,0.82)";
@@ -596,12 +757,17 @@ function updateBoostMeter(players, now) {
   const me = players[myId];
   const show = me && !me.spectator && (latest.phase === "playing" || latest.phase === "round_over");
   const el = $("boost");
+  const btn = $("boostBtn");
   el.style.display = show ? "block" : "none";
+  btn.classList.toggle("off", !show);
   if (!show) return;
   const left = Math.max(0, me.boost - (now - latestTime) / 1000);
+  const charged = 1 - left / cfg.boostCooldown;
   el.classList.toggle("ready", left === 0);
-  $("boostFill").style.width = `${100 * (1 - left / cfg.boostCooldown)}%`;
+  $("boostFill").style.width = `${100 * charged}%`;
   $("boostText").textContent = left === 0 ? "LISTO" : `${left.toFixed(1)}s`;
+  btn.classList.toggle("ready", left === 0);
+  btn.style.setProperty("--p", charged.toFixed(3));
 }
 
 const TRAIL_S = 0.6; // las estelas duran un poco más que el boost y se desvanecen
@@ -643,7 +809,7 @@ function frame() {
   const frameNow = performance.now();
   const dt = Math.min(0.1, (frameNow - lastFrame) / 1000);
   lastFrame = frameNow;
-  const dpr = devicePixelRatio || 1;
+  const dpr = pixelRatio();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#0e0a12";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -652,6 +818,7 @@ function frame() {
   const now = performance.now();
   const chars = interpolatedChars();
   predictOwnChain(chars, now, dt);
+  steerFromStick(chars);
   const players = playersById(latest);
 
   // cámara: sigue a lo que manejo; si no juego, muestra toda la arena

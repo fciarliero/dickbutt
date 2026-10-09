@@ -47,7 +47,7 @@ flowchart LR
 | `server/arena.py` | Paredes y pilares estáticos. |
 | `server/bots.py` | IA de los bots: decide qué teclas aprieta cada bot. |
 | `client/index.html` | Pantalla de nombre, canvas y paneles del HUD (estilos inline). |
-| `client/game.js` | Conexión, input, interpolación, predicción, render y HUD. Vanilla JS, sin build. |
+| `client/game.js` | Conexión, input (teclado y táctil), interpolación, predicción, render y HUD. Vanilla JS, sin build. |
 | `client/p2p.js` | Solo en GitHub Pages: crear o unirse a una sala, PeerJS y un transporte con la interfaz de WebSocket. |
 | `client/host-worker.js` | Solo en GitHub Pages: Web Worker que carga Pyodide + pymunk y corre `Room`. |
 | `tools/build_pages.py` | Arma `_site/` para Pages. Lo corre `.github/workflows/pages.yml`. |
@@ -276,6 +276,21 @@ Resultado medido con ~120 ms de ping: la cabeza empieza a girar en pantalla a lo
 - **Arriba a la derecha**: cadenas en orden con 👑 en el piloto, y botones de bots.
 - **Abajo**: medidor de boost, ayuda de controles, feed de eventos y minimapa.
 
+### Controles táctiles
+
+Se activan con `matchMedia("(pointer: coarse)")` o con el primer `touchstart` (clase `body.touch`). Teclado y táctil escriben el mismo `input` con `setInput()`, que manda un solo mensaje y solo si algo cambió, así que **el servidor y el protocolo no saben nada del celu**.
+
+- **Joystick flotante** (mitad izquierda): la base aparece donde apoyás el dedo, con radio de 60 px. `steerFromStick()` corre en cada frame después de la predicción y traduce el stick a teclas:
+  - rumbo actual: la cabeza que manejo (`cameraTarget`), que ya es la predicha;
+  - deflexión ≥ 0,2: gira (`l`/`r`) hacia el ángulo del stick hasta quedar a menos de 0,1 rad, soltando antes según la velocidad angular (`STICK_LEAD_S`) para no pasarse;
+  - deflexión ≥ 0,55: además empuja (`u`).
+
+  Conquistado, la misma lógica tironea de costado hacia el stick. Medido: el rumbo converge a ~0,1 rad en 1,5 s con ~10 mensajes de input por segundo.
+- **⚡** (abajo a la derecha): `b` mientras está apretado; el cooldown se dibuja con un `conic-gradient` (`--p`).
+- Multitouch por `pointerId`: se puede girar y usar el boost a la vez, y soltar uno no suelta el otro.
+- **Layout**: márgenes con `env(safe-area-inset-*)` por el notch; en pantallas chicas el panel de cadenas arranca colapsado, el feed sube y el minimapa va chico abajo al centro. En vertical aparece un aviso para girar el celu.
+- **Otros**: DPR del canvas limitado a 2, inputs de 16 px (iOS no hace zoom), Wake Lock para que no se apague la pantalla, botón de pantalla completa (Android) y menú de compartir del sistema para el link de la sala.
+
 ## 12. Tuneo
 
 Todo está en `server/config.py`. Los valores que más cambian la sensación del juego:
@@ -356,5 +371,6 @@ Para publicarlo: subir el repo a GitHub y en *Settings → Pages* elegir *Source
 - **Una sola sala** global y sin persistencia: reiniciar el servidor borra todo.
 - **Sin autenticación**: cualquiera con la URL puede entrar y agregar o sacar bots.
 - **Modo P2P**: si el host cierra la pestaña se termina la partida para todos. La primera vez el host baja ~7 MB (Pyodide + pymunk) y tarda unos segundos en arrancar; después queda en caché. Depende del broker y de los TURN públicos de PeerJS: si se caen, no se puede entrar a las salas. La latencia de cada invitado es la de su conexión con el host.
+- **Host en el celu**: si cambia de app o se apaga la pantalla, el navegador congela la página (y el worker) y la sala se cae para todos. Se avisa en la pantalla de inicio y en el panel de sala; Wake Lock evita que la pantalla se apague sola, pero solo con HTTPS.
 - **Esconder la cola contra una pared** es una defensa fuerte, especialmente contra bots.
 - **Con 8 jugadores** cada snapshot pesa ~3–4 KB. A 30 Hz son ~100 KB/s por jugador que tiene que subir el host. Subir a 60 Hz necesitaría un formato más compacto.

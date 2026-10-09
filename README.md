@@ -30,6 +30,13 @@ Detalle en [ARCHITECTURE.md](ARCHITECTURE.md#15-modo-p2p-github-pages).
 - `Espacio`: boost para adelante (0,3 s de empuje fuerte, 3 s de cooldown). Si te conquistaron, el boost es un tirón de sabotaje.
 - Si te conquistaron, las mismas teclas **sabotean**: tironean tu segmento, pero no te sueltan.
 
+En el celu (se activa solo en pantallas táctiles):
+
+- **Joystick** en la mitad izquierda: apoyá el dedo en cualquier lado y arrastrá hacia donde querés ir. Poco arrastre gira; arrastre largo, además empuja.
+- **⚡** abajo a la derecha: boost. El aro muestra el cooldown.
+- Se juega mejor con el celu horizontal. En Android, ⛶ (al lado del ping) pone pantalla completa.
+- Si creás la sala desde el celu, no cambies de app ni bloquees la pantalla: el navegador frena la página y la sala se cae para todos.
+
 ## Bots
 
 Con los botones `−` / `+` del panel de cadenas cualquiera puede sacar o agregar bots (`server/bots.py`). Cuentan como jugadores: pueden conquistar, ser conquistados (y sabotear) y ganar. Un bot agregado a mitad de ronda entra en la siguiente. Sin humanos conectados, los bots esperan en el lobby.
